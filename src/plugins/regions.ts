@@ -8,6 +8,7 @@ import BasePlugin, { type BasePluginEvents } from '../base-plugin.js'
 import { makeDraggable } from '../draggable.js'
 import EventEmitter from '../event-emitter.js'
 import createElement from '../dom.js'
+import Graph from '../graph.js'
 
 export type RegionsPluginOptions = undefined
 
@@ -405,11 +406,13 @@ class SingleRegion extends EventEmitter<RegionEvents> implements Region {
 class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions> {
   private regions: Region[] = []
   private regionsContainer: HTMLElement
+  private overlapGraph: Graph<string>
 
   /** Create an instance of RegionsPlugin */
   constructor(options?: RegionsPluginOptions) {
     super(options)
     this.regionsContainer = this.initRegionsContainer()
+    this.overlapGraph = new Graph()
   }
 
   /** Create an instance of RegionsPlugin */
@@ -498,6 +501,40 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
     }, 10)
   }
 
+	private updateOverlapGraph(): void {
+		this.overlapGraph.getNodes().forEach(regionId1 => {
+			this.overlapGraph.getNodes().forEach(regionId2 => {
+        const region1 = this.getRegions().find(region => region.id === regionId1) as Region
+        const region2 = this.getRegions().find(region => region.id === regionId2) as Region
+				// if there is an overlap between the two annotations, add a edge between them in the grap
+				if(region1.start < region2.end && region2.start < region1.end){
+					this.overlapGraph.addEdge(regionId1, regionId2)
+				}
+				else{
+					// if an edge exists between the two annotations, remove it from the graph
+					this.overlapGraph.removeEdge(regionId1, regionId2)
+				}
+			})
+		})
+
+		// resolve graph coloring problem on connected component to which the region belongs
+		const connectedComponents = this.overlapGraph.getConnectedComponents()
+		connectedComponents.forEach(connectedComponent => {
+			const graphColoring = connectedComponent.greedyColoring()
+			const numColors = Math.max(...Array.from(graphColoring.values())) + 1
+
+			// update region alignment
+      connectedComponent.getNodes().forEach((regionId) => {
+        const region = this.getRegions().find(_region => _region.id === regionId) as Region
+        const color = graphColoring.get(region.id) as number
+        const height = 100 / numColors
+        const top = color * height
+        region.element.style.top = `${top}%`
+        region.element.style.height = `${height}%`
+      })
+		})
+  }
+	
   private adjustScroll(region: Region) {
     const scrollContainer = this.wavesurfer?.getWrapper()?.parentElement
     if (!scrollContainer) return
@@ -559,6 +596,7 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
 
       region.on('update-end', () => {
         this.avoidOverlapping(region)
+        this.updateOverlapGraph()
         this.emit('region-updated', region)
       }),
 
@@ -575,10 +613,12 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
         this.emit('region-double-clicked', region, e)
       }),
 
-      // Remove the region from the list when it's removed
+      // Remove the region from the list when it's removed and update overlap graph
       region.once('remove', () => {
         regionSubscriptions.forEach((unsubscribe) => unsubscribe())
         this.regions = this.regions.filter((reg) => reg !== region)
+        this.overlapGraph.removeNode(region.id)
+        this.updateOverlapGraph()
         this.emit('region-removed', region)
       }),
     ]
@@ -608,6 +648,10 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
     } else {
       this.saveRegion(region)
     }
+
+    // update overlap graph
+    this.overlapGraph.addNode(region.id)
+    this.updateOverlapGraph()
 
     return region
   }
@@ -677,6 +721,7 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
   /** Remove all regions */
   public clearRegions() {
     this.regions.forEach((region) => region.remove())
+    this.overlapGraph.clear()
   }
 
   /** Destroy the plugin and clean up */
