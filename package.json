@@ -1,6 +1,6 @@
 {
-  "name": "wavesurfer.js",
-  "version": "7.8.4",
+  "name": "@gryannote/wavesurfer.js",
+  "version": "7.8.6",
   "license": "BSD-3-Clause",
   "author": "katspaugh",
   "description": "Audio waveform player",
@@ -15,7 +15,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:katspaugh/wavesurfer.js.git"
+    "url": "git@github.com:clement-pages/wavesurfer.js.git"
   },
   "type": "module",
   "files": [
