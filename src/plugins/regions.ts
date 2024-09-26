@@ -501,38 +501,54 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
     }, 10)
   }
 
-	private updateOverlapGraph(): void {
-		this.overlapGraph.getNodes().forEach(regionId1 => {
-			this.overlapGraph.getNodes().forEach(regionId2 => {
-        const region1 = this.getRegions().find(region => region.id === regionId1) as Region
-        const region2 = this.getRegions().find(region => region.id === regionId2) as Region
-				// if there is an overlap between the two annotations, add a edge between them in the grap
-				if(region1.start < region2.end && region2.start < region1.end){
-					this.overlapGraph.addEdge(regionId1, regionId2)
-				}
-				else{
-					// if an edge exists between the two annotations, remove it from the graph
-					this.overlapGraph.removeEdge(regionId1, regionId2)
-				}
-			})
-		})
+  private updateConnectedComponentRegions(cc: Graph<string>){
+    const ccColoring = cc.greedyColoring()
+    const numColors = Math.max(...Array.from(ccColoring.values())) + 1
 
-		// resolve graph coloring problem on connected component to which the region belongs
-		const connectedComponents = this.overlapGraph.getConnectedComponents()
-		connectedComponents.forEach(connectedComponent => {
-			const graphColoring = connectedComponent.greedyColoring()
-			const numColors = Math.max(...Array.from(graphColoring.values())) + 1
+    // update region alignment
+    cc.getNodes().forEach((regionId) => {
+      const region = this.getRegions().find(_region => _region.id === regionId) as Region
+      const color = ccColoring.get(region.id) as number
+      const height = 100 / numColors
+      const top = color * height
+      region.element.style.top = `${top}%`
+      region.element.style.height = `${height}%`
+    })
+  }
 
-			// update region alignment
-      connectedComponent.getNodes().forEach((regionId) => {
-        const region = this.getRegions().find(_region => _region.id === regionId) as Region
-        const color = graphColoring.get(region.id) as number
-        const height = 100 / numColors
-        const top = color * height
-        region.element.style.top = `${top}%`
-        region.element.style.height = `${height}%`
-      })
+	private updateOverlapGraph(region: Region): void {
+    // get current graph's connected component to which region belongs
+    const sourceCC = this.overlapGraph.getConnectedComponent(region.id)
+    sourceCC.removeNode(region.id)
+
+    // update graph with new region's start and end
+		this.overlapGraph.getNodes().forEach(regionId2 => {
+      const region2 = this.getRegions().find(region => region.id === regionId2) as Region
+      // if there is an overlap between the two regions, add an edge between them
+      if(region.start < region2.end && region2.start < region.end){
+        this.overlapGraph.addEdge(region.id, regionId2)
+      }
+      else{
+        // if an edge exists between the two regions, remove it from the graph as these regions are not overlapped
+        this.overlapGraph.removeEdge(region.id, regionId2)
+      }
 		})
+		// get region's graph connected component after graph update
+    const targetCC = this.overlapGraph.getConnectedComponent(region.id)
+
+    // update region style in both source and target connected component
+    const cc2Update = [sourceCC, targetCC]
+		cc2Update.forEach(cc => {
+      this.updateConnectedComponentRegions(cc)
+    })
+  }
+
+  private removeRegionFromOverlapGraph(region: Region){
+    // get region graph connected component
+    let regionCC = this.overlapGraph.getConnectedComponent(region.id)
+    regionCC.removeNode(region.id)
+    this.updateConnectedComponentRegions(regionCC)
+    this.overlapGraph.removeNode(region.id)
   }
 	
   private adjustScroll(region: Region) {
@@ -591,12 +607,12 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
         if (!side) {
           this.adjustScroll(region)
         }
+        this.updateOverlapGraph(region)
         this.emit('region-update', region, side)
       }),
 
       region.on('update-end', () => {
         this.avoidOverlapping(region)
-        this.updateOverlapGraph()
         this.emit('region-updated', region)
       }),
 
@@ -617,8 +633,7 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
       region.once('remove', () => {
         regionSubscriptions.forEach((unsubscribe) => unsubscribe())
         this.regions = this.regions.filter((reg) => reg !== region)
-        this.overlapGraph.removeNode(region.id)
-        this.updateOverlapGraph()
+        this.removeRegionFromOverlapGraph(region)
         this.emit('region-removed', region)
       }),
     ]
@@ -651,7 +666,7 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
 
     // update overlap graph
     this.overlapGraph.addNode(region.id)
-    this.updateOverlapGraph()
+    this.updateOverlapGraph(region)
 
     return region
   }
