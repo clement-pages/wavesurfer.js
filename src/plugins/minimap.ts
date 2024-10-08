@@ -67,6 +67,10 @@ class MinimapPlugin extends BasePlugin<MinimapPluginEvents, MinimapPluginOptions
     return new MinimapPlugin(options)
   }
 
+  public getWaveform(): WaveSurfer | null {
+    return this.miniWavesurfer
+  }
+
   /** Called by wavesurfer, don't call manually */
   onInit() {
     if (!this.wavesurfer) {
