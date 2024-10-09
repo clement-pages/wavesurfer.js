@@ -201,7 +201,9 @@ class WaveSurfer extends Player<WaveSurferEvents> {
   }
 
   private updateProgress(currentTime = this.getCurrentTime()): number {
-    this.renderer.renderProgress(currentTime / this.getDuration(), this.isPlaying())
+    if(this.options.waveColor !== this.options.progressColor){
+      this.renderer.renderProgress(currentTime / this.getDuration(), this.isPlaying())
+    }
     return currentTime
   }
 
@@ -309,7 +311,9 @@ class WaveSurfer extends Player<WaveSurferEvents> {
           if (!this.options.interact) return
 
           // Update the visual position
-          this.renderer.renderProgress(relativeX)
+          if(this.options.waveColor !== this.options.progressColor){
+            this.renderer.renderProgress(relativeX)
+          }
 
           // Set the audio position with a debounce
           clearTimeout(debounce)
