@@ -103,7 +103,7 @@ export default class Graph<N> {
      * @returns true if the node has been successfully removed, false otherwise
      */
     public removeNode(node: N): boolean {
-        let adjNodes = this.getAdjNodes(node);
+        let adjNodes = this.getAdjNodes(node)?.slice();
         if(adjNodes === undefined) return false;
 
         // remove all the corresponding edges
