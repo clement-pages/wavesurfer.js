@@ -1,6 +1,6 @@
 {
   "name": "@gryannote/wavesurfer.js",
-  "version": "7.8.9",
+  "version": "7.8.10",
   "license": "BSD-3-Clause",
   "authors": ["katspaugh", "clement-pages"],
   "description": "Audio waveform player",
