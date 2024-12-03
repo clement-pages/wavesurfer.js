@@ -640,6 +640,9 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
 
     this.subscriptions.push(...regionSubscriptions)
 
+    this.overlapGraph.addNode(region.id)
+    this.updateOverlapGraph(region)
+
     this.emit('region-created', region)
   }
 
