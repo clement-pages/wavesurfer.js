@@ -406,7 +406,8 @@ class SingleRegion extends EventEmitter<RegionEvents> implements Region {
 class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions> {
   private regions: Region[] = []
   private regionsContainer: HTMLElement
-  private overlapGraph: Graph<string>
+  private tracks: number[] = []
+  private numActiveTracks: number[] = []
 
   /** Create an instance of RegionsPlugin */
   constructor(options?: RegionsPluginOptions) {
@@ -516,55 +517,47 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
     })
   }
 
-	private updateOverlapGraph(region: Region): void {
-    // get current graph's connected component to which region belongs
-    const sourceCC = this.overlapGraph.getConnectedComponent(region.id)
-    sourceCC.removeNode(region.id)
+  private updateOverlap(): void {
+    const (tracks, numActiveTracks, ...} = this.getTracks()
 
-    // update graph with new region's start and end
-		this.overlapGraph.getNodes().forEach(regionId2 => {
-      const region2 = this.getRegions().find(region => region.id === regionId2) as Region
-      // if there is an overlap between the two regions, add an edge between them
-      if(region.start < region2.end && region2.start < region.end){
-        this.overlapGraph.addEdge(region.id, regionId2)
-      }
-      else{
-        // if an edge exists between the two regions, remove it from the graph as these regions are not overlapped
-        this.overlapGraph.removeEdge(region.id, regionId2)
-      }
-		})
-		// get region's graph connected component after graph update
-    const targetCC = this.overlapGraph.getConnectedComponent(region.id)
+    this.getRegions().forEach((region, index) => {
+      const regionTrack = tracks[index]
+      const numActiveTracks = this.numActiveTracks[index]
 
-    // update region style in both source and target connected component
-    const cc2Update = [sourceCC, targetCC]
-		cc2Update.forEach(cc => {
-      this.updateConnectedComponentRegions(cc)
+      const height = 100 / numActiveTracks
+      const top = regionTrack * height
+      region.element.style.top = `${top}%`
+      region.element.style.height = `${height}%`
     })
   }
 
-  private removeRegionFromOverlapGraph(region: Region){
-    // get region graph connected component
-    let regionCC = this.overlapGraph.getConnectedComponent(region.id)
-    regionCC.removeNode(region.id)
-    this.updateConnectedComponentRegions(regionCC)
-    this.overlapGraph.removeNode(region.id)
-  }
-	
-  private adjustScroll(region: Region) {
-    const scrollContainer = this.wavesurfer?.getWrapper()?.parentElement
-    if (!scrollContainer) return
-    const { clientWidth, scrollWidth } = scrollContainer
-    if (scrollWidth <= clientWidth) return
-    const scrollBbox = scrollContainer.getBoundingClientRect()
-    const bbox = region.element.getBoundingClientRect()
-    const left = bbox.left - scrollBbox.left
-    const right = bbox.right - scrollBbox.left
-    if (left < 0) {
-      scrollContainer.scrollLeft += left
-    } else if (right > clientWidth) {
-      scrollContainer.scrollLeft += right - clientWidth
+  private getTracks(): {tracks: number[], numActiveTracks: number[]} {
+    const regions = this.getRegions()
+    const moments = [
+      ...regions.map((r, i) => {return {time: r.start, start: true, index: i}}),
+      ...regions.map((r, i) => {return {time: r.end, start:false, index: i}})
+    ]
+    moments.sort((m1, m2) => m1.time - m2.time)
+    const tracks = [...regions.map(r => -1)]
+    const numActiveTracks = [...regions.map(r => 0)]
+    const activeTracks = new Set()
+    for(let {start, index} of moments) {
+      if(start){
+        let regionTrack = -1
+        for(let track = 0; track < 10;track++) {
+          if(!activeTracks.has(track)) {
+            regionTrack = track
+            break
+          }
+        }
+        tracks[index] = regionTrack
+        activeTracks.add(regionTrack)
+        this.numActiveTracks.push(activeTracks.size)
+      } else { 
+        activeTracks.delete(tracks[index])
+      }
     }
+    return {tracks, numActiveTracks}
   }
 
   private virtualAppend(region: Region, container: HTMLElement, element: HTMLElement) {
