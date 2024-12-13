@@ -10,7 +10,10 @@ import EventEmitter from '../event-emitter.js'
 import createElement from '../dom.js'
 import Graph from '../graph.js'
 
-export type RegionsPluginOptions = undefined
+export type RegionsPluginOptions = {
+  /** Whether to avoid the regions to be overlapped on the display*/
+  avoidOverlap?: boolean
+}
 
 export type RegionsPluginEvents = BasePluginEvents & {
   /** When a region is created */
@@ -403,20 +406,23 @@ class SingleRegion extends EventEmitter<RegionEvents> implements Region {
   }
 }
 
-class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions> {
+class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions | undefined> {
   private regions: Region[] = []
   private regionsContainer: HTMLElement
+  private avoidOverlap: boolean
   private overlapGraph: Graph<string>
 
   /** Create an instance of RegionsPlugin */
   constructor(options?: RegionsPluginOptions) {
     super(options)
+
+    this.avoidOverlap = options?.avoidOverlap ?? true
     this.regionsContainer = this.initRegionsContainer()
     this.overlapGraph = new Graph()
   }
 
   /** Create an instance of RegionsPlugin */
-  public static create(options?: RegionsPluginOptions) {
+  public static create(options: RegionsPluginOptions) {
     return new RegionsPlugin(options)
   }
 
@@ -512,7 +518,7 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
       const height = 100 / numColors
       const top = color * height
       region.element.style.top = `${top}%`
-      region.element.style.height = `${height}%`
+      region.element.style.cssText += `height: ${height}% !important;`
     })
   }
 
@@ -607,7 +613,9 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
         if (!side) {
           this.adjustScroll(region)
         }
-        this.updateOverlapGraph(region)
+        if(this.avoidOverlap){
+          this.updateOverlapGraph(region)
+        }
         this.emit('region-update', region, side)
       }),
 
@@ -633,16 +641,20 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
       region.once('remove', () => {
         regionSubscriptions.forEach((unsubscribe) => unsubscribe())
         this.regions = this.regions.filter((reg) => reg !== region)
-        this.removeRegionFromOverlapGraph(region)
+        if(this.avoidOverlap){
+          this.removeRegionFromOverlapGraph(region)
+        }
         this.emit('region-removed', region)
       }),
     ]
 
     this.subscriptions.push(...regionSubscriptions)
 
-    this.overlapGraph.addNode(region.id)
-    this.updateOverlapGraph(region)
-
+    if(this.avoidOverlap){
+      this.overlapGraph.addNode(region.id)
+      this.updateOverlapGraph(region)
+    }
+  
     this.emit('region-created', region)
   }
 
@@ -668,8 +680,10 @@ class RegionsPlugin extends BasePlugin<RegionsPluginEvents, RegionsPluginOptions
     }
 
     // update overlap graph
-    this.overlapGraph.addNode(region.id)
-    this.updateOverlapGraph(region)
+    if(this.avoidOverlap){
+      this.overlapGraph.addNode(region.id)
+      this.updateOverlapGraph(region)
+    }
 
     return region
   }
